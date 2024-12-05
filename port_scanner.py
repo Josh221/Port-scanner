@@ -56,5 +56,3 @@ if __name__ == "__main__":
         print("Error: Invalid input. Please enter numeric values for ports.")
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-
-
