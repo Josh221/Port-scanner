@@ -3,19 +3,37 @@ import time
 from socket import *
 
 semaphore = asyncio.Semaphore(500)  # Limit concurrent tasks
-open_ports = []  # List to store open ports
+open_ports = []  # List to store open ports and services
+
+def is_host_reachable(target_IP):
+    """Check if the host is reachable by attempting a connection."""
+    try:
+        with socket(AF_INET, SOCK_STREAM) as s:
+            s.settimeout(1)  # Set a short timeout
+            s.connect((target_IP, 80))  # Attempt to connect to port 80
+        return True
+    except (OSError, ConnectionRefusedError):
+        return False
 
 async def scan_port(target_IP, port):
-    """Asynchronously scan a single port with concurrency limit."""
+    """Asynchronously scan a single port and retrieve service name if open."""
     async with semaphore:
         try:
+            # Attempt to establish a connection
             await asyncio.wait_for(asyncio.open_connection(target_IP, port), timeout=0.5)
-            print(f"Port {port}: OPEN")
-            open_ports.append(port)
+            try:
+                # Get the service name if available
+                service_name = getservbyport(port)
+            except OSError:
+                service_name = "Unknown Service"
+            
+            print(f"Port {port}: OPEN (Service: {service_name})")
+            open_ports.append((port, service_name))
         except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
             pass  # Port is closed or not responding
         except Exception as e:
             print(f"Error scanning port {port}: {e}")
+
 
 async def scan_ports_concurrently(target_IP, start_port, end_port):
     """Scan ports concurrently using asyncio tasks."""
@@ -25,11 +43,18 @@ async def scan_ports_concurrently(target_IP, start_port, end_port):
     ]
     await asyncio.gather(*tasks)
 
+
 if __name__ == "__main__":
     try:
         target = input("Enter host for scanning: ")
         target_IP = gethostbyname(target)
         print(f"Start scanning on host: {target_IP}")
+
+        if not is_host_reachable(target_IP):
+            print(f"Error: The host {target_IP} is not reachable. Please check the target and try again.")
+            exit()
+
+        print(f"Host {target_IP} is reachable. Starting port scan.")
 
         start_port = int(input("Enter the start port: "))
         end_port = int(input("Enter the end port: "))
@@ -44,7 +69,9 @@ if __name__ == "__main__":
         print('Time taken: ', time.time() - start_time)
 
         if open_ports:
-            print(f"Open ports: {open_ports}")
+            print("Open ports and their services:")
+            for port, service in open_ports:
+                print(f"Port {port}: {service}")
         else:
             print("No open ports found.")
 
